@@ -1,283 +1,268 @@
 from conectar import conectar
-import mysql.connector
+from mysql.connector import Error
 
-# === CREATE ===
-def crear_cuenta():
-    conexion = conectar()
-    if not conexion:
-        return
-
-    nombre = input("Nombre de usuario: ")
-    correo = input("Correo electrónico: ")
-    contrasena = input("Contraseña: ")
-    plataforma = input("Plataforma (PC, Xbox, PlayStation): ")
-
-    try:
-        cursor = conexion.cursor()
-        query = "INSERT INTO cuentas (nombre_usuario, correo, contrasena, plataforma) VALUES (%s, %s, %s, %s)"
-        cursor.execute(query, (nombre, correo, contrasena, plataforma))
-        conexion.commit()
-        print("Cuenta creada exitosamente.")
-    except mysql.connector.Error as err:
-        print(f"Error al crear cuenta: {err}")
-    finally:
-        conexion.close()
-
-def iniciar_sesion():
-    conexion = conectar()
-    if not conexion:
-        return None
-
-    print("\n=== INICIO DE SESIÓN ===")
-    nombre = input("Nombre de usuario: ")
-    contrasena = input("Contraseña: ")
-
-    try:
-        cursor = conexion.cursor()
-        query = "SELECT id FROM cuentas WHERE nombre_usuario = %s AND contrasena = %s"
-        cursor.execute(query, (nombre, contrasena))
-        usuario = cursor.fetchone()
-
-        if usuario:
-            print(f"Inicio de sesión exitoso. Bienvenido, {nombre}!")
-            return usuario[0]
-        else:
-            print("Usuario o contraseña incorrectos.")
-            return None
-    except mysql.connector.Error as err:
-        print(f"Error al iniciar sesión: {err}")
-        return None
-    finally:
-        conexion.close()
-
-# === READ ===
-def ver_cuenta():
-    conexion = conectar()
-    if not conexion:
-        return
-
-    id_cuenta = input("Ingrese el ID de la cuenta que desea ver: ")
-
-    try:
-        cursor = conexion.cursor()
-        query = """
-        SELECT nombre_usuario, correo, plataforma, 
-        (SELECT COUNT(*) FROM estadisticas WHERE id_cuenta = cuentas.id) AS partidas,
-        (SELECT IFNULL(AVG(kd_ratio), 0) FROM estadisticas WHERE id_cuenta = cuentas.id) AS kd_promedio,
-        (SELECT COUNT(*) FROM resenas WHERE id_cuenta = cuentas.id) AS resenas
-        FROM cuentas
-        WHERE id = %s
-        """
-        cursor.execute(query, (id_cuenta,))
-        cuenta = cursor.fetchone()
-
-        if cuenta:
-            print(f"Nombre: {cuenta[0]}, Correo: {cuenta[1]}, Plataforma: {cuenta[2]}, "
-                  f"Partidas: {cuenta[3]}, K/D Ratio promedio: {cuenta[4]:.2f}, Reseñas: {cuenta[5]}")
-        else:
-            print("Cuenta no encontrada.")
-    except mysql.connector.Error as err:
-        print(f"Error al obtener cuenta: {err}")
-    finally:
-        conexion.close()
-
-def registrar_estadistica(usuario_id):
-    conexion = conectar()
-    if not conexion:
-        return
-
-    id_partida = input("ID de la partida: ")
-    kd_ratio = float(input("K/D Ratio: "))
-    puntuacion = int(input("Puntuación: "))
-    modo_juego = input("Modo de juego: ")
-
-    try:
-        cursor = conexion.cursor()
-        query = "INSERT INTO estadisticas (id_cuenta, id_partida, kd_ratio, puntuacion, modo_juego) VALUES (%s, %s, %s, %s, %s)"
-        cursor.execute(query, (usuario_id, id_partida, kd_ratio, puntuacion, modo_juego))
-        conexion.commit()
-        print("Estadística registrada exitosamente.")
-    except mysql.connector.Error as err:
-        print(f"Error al registrar estadística: {err}")
-    finally:
-        conexion.close()
-
-def agregar_resena(usuario_id):
-    conexion = conectar()
-    if not conexion:
-        return
-
-    id_mapa_modo = input("ID del mapa o modo de juego: ")
-    contenido = input("Reseña (máx 500 caracteres): ")
-
-    while True:
+# Función para iniciar sesión
+def iniciar_sesion(usuario, contrasena):
+    connection = conectar()
+    if connection:
         try:
-            calificacion = int(input("Calificación (1-5): "))
-            if 1 <= calificacion <= 5:
-                break
+            cursor = connection.cursor()
+            query = "SELECT * FROM cuentas WHERE usuario = %s AND password = %s"
+            cursor.execute(query, (usuario, contrasena))
+            cuenta = cursor.fetchone()
+            if cuenta:
+                print(f"Bienvenido {usuario}")
+                return True  # Retorna True si la sesión es exitosa
             else:
-                print("La calificación debe estar entre 1 y 5.")
-        except ValueError:
-            print("Debe ingresar un número entero entre 1 y 5.")
+                print("Usuario o contraseña incorrectos.")
+                return False  # Retorna False si la sesión falla
+        except Error as e:
+            print(f"Error al iniciar sesión: {e}")
+            return False  # En caso de error también retorna False
+        finally:
+            cursor.close()
+            connection.close()
 
-    try:
-        cursor = conexion.cursor()
-        query = "INSERT INTO resenas (id_cuenta, id_mapa_modo, contenido, calificacion) VALUES (%s, %s, %s, %s)"
-        cursor.execute(query, (usuario_id, id_mapa_modo, contenido, calificacion))
-        conexion.commit()
-        print("Reseña agregada exitosamente.")
-    except mysql.connector.Error as err:
-        print(f"Error al agregar reseña: {err}")
-    finally:
-        conexion.close()
+# CRUD para la tabla 'cuentas'
+def agregar_cuenta(usuario, email, password, plataforma_id):
+    connection = conectar()
+    if connection:
+        try:
+            cursor = connection.cursor()
+            query = "INSERT INTO cuentas (usuario, email, password, plataforma_id, fecha_creacion) VALUES (%s, %s, %s, %s, NOW())"
+            cursor.execute(query, (usuario, email, password, plataforma_id))
+            connection.commit()
+            print("Cuenta agregada correctamente.")
+        except Error as e:
+            print(f"Error al agregar cuenta: {e}")
+        finally:
+            cursor.close()
+            connection.close()
 
-# === UPDATE ===
-def editar_cuenta(usuario_id):
-    conexion = conectar()
-    if not conexion:
-        return
+def obtener_cuentas():
+    connection = conectar()
+    if connection:
+        try:
+            cursor = connection.cursor()
+            cursor.execute("SELECT * FROM cuentas")
+            cuentas = cursor.fetchall()
+            for cuenta in cuentas:
+                print(cuenta)
+        except Error as e:
+            print(f"Error al obtener cuentas: {e}")
+        finally:
+            cursor.close()
+            connection.close()
 
-    nuevo_nombre = input("Nuevo nombre de usuario (dejar vacío para no cambiar): ")
-    nuevo_correo = input("Nuevo correo electrónico (dejar vacío para no cambiar): ")
-    nueva_contrasena = input("Nueva contraseña (dejar vacío para no cambiar): ")
-    nueva_plataforma = input("Nueva plataforma (PC, Xbox, PlayStation) (dejar vacío para no cambiar): ")
+def actualizar_cuenta(cuenta_id, usuario, email, password, plataforma_id):
+    connection = conectar()
+    if connection:
+        try:
+            cursor = connection.cursor()
+            query = "UPDATE cuentas SET usuario = %s, email = %s, password = %s, plataforma_id = %s WHERE id = %s"
+            cursor.execute(query, (usuario, email, password, plataforma_id, cuenta_id))
+            connection.commit()
+            print("Cuenta actualizada correctamente.")
+        except Error as e:
+            print(f"Error al actualizar cuenta: {e}")
+        finally:
+            cursor.close()
+            connection.close()
 
-    try:
-        cursor = conexion.cursor()
-        query = "UPDATE cuentas SET "
-        valores = []
+def eliminar_cuenta(cuenta_id):
+    connection = conectar()
+    if connection:
+        try:
+            cursor = connection.cursor()
+            query = "DELETE FROM cuentas WHERE id = %s"
+            cursor.execute(query, (cuenta_id,))
+            connection.commit()
+            print("Cuenta eliminada correctamente.")
+        except Error as e:
+            print(f"Error al eliminar cuenta: {e}")
+        finally:
+            cursor.close()
+            connection.close()
 
-        if nuevo_nombre:
-            query += "nombre_usuario = %s, "
-            valores.append(nuevo_nombre)
-        if nuevo_correo:
-            query += "correo = %s, "
-            valores.append(nuevo_correo)
-        if nueva_contrasena:
-            query += "contrasena = %s, "
-            valores.append(nueva_contrasena)
-        if nueva_plataforma:
-            query += "plataforma = %s, "
-            valores.append(nueva_plataforma)
+# CRUD para la tabla 'estadisticas_armas'
+def agregar_estadistica_arma(cuenta_id, arma_id, tiempo_usado, kills, muertes):
+    connection = conectar()
+    if connection:
+        try:
+            cursor = connection.cursor()
+            query = "INSERT INTO estadisticas_armas (cuenta_id, arma_id, tiempo_usado, kills, muertes) VALUES (%s, %s, %s, %s, %s)"
+            cursor.execute(query, (cuenta_id, arma_id, tiempo_usado, kills, muertes))
+            connection.commit()
+            print("Estadística de arma agregada correctamente.")
+        except Error as e:
+            print(f"Error al agregar estadística de arma: {e}")
+        finally:
+            cursor.close()
+            connection.close()
 
-        query = query.rstrip(", ") + " WHERE id = %s"
-        valores.append(usuario_id)
+def obtener_estadisticas_arma():
+    connection = conectar()
+    if connection:
+        try:
+            cursor = connection.cursor()
+            cursor.execute("SELECT * FROM estadisticas_armas")
+            estadisticas = cursor.fetchall()
+            for estadistica in estadisticas:
+                print(estadistica)
+        except Error as e:
+            print(f"Error al obtener estadísticas de armas: {e}")
+        finally:
+            cursor.close()
+            connection.close()
 
-        cursor.execute(query, valores)
-        conexion.commit()
+def actualizar_estadistica_arma(id, cuenta_id, arma_id, tiempo_usado, kills, muertes):
+    connection = conectar()
+    if connection:
+        try:
+            cursor = connection.cursor()
+            query = "UPDATE estadisticas_armas SET cuenta_id = %s, arma_id = %s, tiempo_usado = %s, kills = %s, muertes = %s WHERE id = %s"
+            cursor.execute(query, (cuenta_id, arma_id, tiempo_usado, kills, muertes, id))
+            connection.commit()
+            print("Estadística de arma actualizada correctamente.")
+        except Error as e:
+            print(f"Error al actualizar estadística de arma: {e}")
+        finally:
+            cursor.close()
+            connection.close()
 
-        if cursor.rowcount > 0:
-            print("Cuenta actualizada exitosamente.")
-        else:
-            print("No se realizaron cambios.")
-    except mysql.connector.Error as err:
-        print(f"Error al editar cuenta: {err}")
-    finally:
-        conexion.close()
+def eliminar_estadistica_arma(id):
+    connection = conectar()
+    if connection:
+        try:
+            cursor = connection.cursor()
+            query = "DELETE FROM estadisticas_armas WHERE id = %s"
+            cursor.execute(query, (id,))
+            connection.commit()
+            print("Estadística de arma eliminada correctamente.")
+        except Error as e:
+            print(f"Error al eliminar estadística de arma: {e}")
+        finally:
+            cursor.close()
+            connection.close()
 
-def editar_estadistica():
-    conexion = conectar()
-    if not conexion:
-        return
+# CRUD para la tabla 'mapas'
+def agregar_mapa(nombre, tipo, descripcion):
+    connection = conectar()
+    if connection:
+        try:
+            cursor = connection.cursor()
+            query = "INSERT INTO mapas (nombre, tipo, descripcion) VALUES (%s, %s, %s)"
+            cursor.execute(query, (nombre, tipo, descripcion))
+            connection.commit()
+            print("Mapa agregado correctamente.")
+        except Error as e:
+            print(f"Error al agregar mapa: {e}")
+        finally:
+            cursor.close()
+            connection.close()
 
-    id_estadistica = input("ID de la estadística a editar: ")
-    nuevo_kd_ratio = input("Nuevo K/D Ratio (dejar vacío para no cambiar): ")
-    nueva_puntuacion = input("Nueva puntuación (dejar vacío para no cambiar): ")
-    nuevo_modo = input("Nuevo modo de juego (dejar vacío para no cambiar): ")
+def obtener_mapas():
+    connection = conectar()
+    if connection:
+        try:
+            cursor = connection.cursor()
+            cursor.execute("SELECT * FROM mapas")
+            mapas = cursor.fetchall()
+            for mapa in mapas:
+                print(mapa)
+        except Error as e:
+            print(f"Error al obtener mapas: {e}")
+        finally:
+            cursor.close()
+            connection.close()
 
-    try:
-        cursor = conexion.cursor()
-        query = "UPDATE estadisticas SET "
-        valores = []
+def actualizar_mapa(id, nombre, tipo, descripcion):
+    connection = conectar()
+    if connection:
+        try:
+            cursor = connection.cursor()
+            query = "UPDATE mapas SET nombre = %s, tipo = %s, descripcion = %s WHERE id = %s"
+            cursor.execute(query, (nombre, tipo, descripcion, id))
+            connection.commit()
+            print("Mapa actualizado correctamente.")
+        except Error as e:
+            print(f"Error al actualizar mapa: {e}")
+        finally:
+            cursor.close()
+            connection.close()
 
-        if nuevo_kd_ratio:
-            query += "kd_ratio = %s, "
-            valores.append(float(nuevo_kd_ratio))
-        if nueva_puntuacion:
-            query += "puntuacion = %s, "
-            valores.append(int(nueva_puntuacion))
-        if nuevo_modo:
-            query += "modo_juego = %s, "
-            valores.append(nuevo_modo)
+def eliminar_mapa(id):
+    connection = conectar()
+    if connection:
+        try:
+            cursor = connection.cursor()
+            query = "DELETE FROM mapas WHERE id = %s"
+            cursor.execute(query, (id,))
+            connection.commit()
+            print("Mapa eliminado correctamente.")
+        except Error as e:
+            print(f"Error al eliminar mapa: {e}")
+        finally:
+            cursor.close()
+            connection.close()
 
-        query = query.rstrip(", ") + " WHERE id = %s"
-        valores.append(id_estadistica)
+# CRUD para la tabla 'membresias_clan'
+def agregar_membresia_clan(cuenta_id, clan_id, rol):
+    connection = conectar()
+    if connection:
+        try:
+            cursor = connection.cursor()
+            query = "INSERT INTO membresias_clan (cuenta_id, clan_id, rol) VALUES (%s, %s, %s)"
+            cursor.execute(query, (cuenta_id, clan_id, rol))
+            connection.commit()
+            print("Membresía agregada correctamente.")
+        except Error as e:
+            print(f"Error al agregar membresía de clan: {e}")
+        finally:
+            cursor.close()
+            connection.close()
 
-        cursor.execute(query, valores)
-        conexion.commit()
+def obtener_membresias_clan():
+    connection = conectar()
+    if connection:
+        try:
+            cursor = connection.cursor()
+            cursor.execute("SELECT * FROM membresias_clan")
+            membresias = cursor.fetchall()
+            for membresia in membresias:
+                print(membresia)
+        except Error as e:
+            print(f"Error al obtener membresías de clan: {e}")
+        finally:
+            cursor.close()
+            connection.close()
 
-        if cursor.rowcount > 0:
-            print("Estadística actualizada exitosamente.")
-        else:
-            print("No se realizaron cambios.")
-    except mysql.connector.Error as err:
-        print(f"Error al editar estadística: {err}")
-    finally:
-        conexion.close()
+def actualizar_membresia_clan(id, cuenta_id, clan_id, rol):
+    connection = conectar()
+    if connection:
+        try:
+            cursor = connection.cursor()
+            query = "UPDATE membresias_clan SET cuenta_id = %s, clan_id = %s, rol = %s WHERE id = %s"
+            cursor.execute(query, (cuenta_id, clan_id, rol, id))
+            connection.commit()
+            print("Membresía de clan actualizada correctamente.")
+        except Error as e:
+            print(f"Error al actualizar membresía de clan: {e}")
+        finally:
+            cursor.close()
+            connection.close()
 
-# === DELETE ===
-def eliminar_cuenta(usuario_id):
-    conexion = conectar()
-    if not conexion:
-        return
-
-    try:
-        cursor = conexion.cursor()
-        query = "DELETE FROM cuentas WHERE id = %s"
-        cursor.execute(query, (usuario_id,))
-        conexion.commit()
-        if cursor.rowcount > 0:
-            print("Cuenta eliminada exitosamente.")
-        else:
-            print("No se encontró la cuenta.")
-    except mysql.connector.Error as err:
-        print(f"Error al eliminar cuenta: {err}")
-    finally:
-        conexion.close()
-# cosas agregar los cambios 
-
-def visualizar_informacion(cursor, usuario_id):
-    cursor.execute("SELECT nombre_usuario, correo, plataforma_id, partidas_jugadas FROM usuarios WHERE id = %s", (usuario_id,))
-
-    usuario = cursor.fetchone()
-    
-    if usuario:
-        print("Nombre de usuario:", usuario['nombre_usuario'])
-        print("Correo electrónico:", usuario['correo'])
-        print("Plataforma:", usuario['plataforma_id'])
-        print("Número de partidas jugadas:", usuario['partidas_jugadas'])
-        print("K/D Ratio promedio:", usuario['kd_ratio_promedio'])
-        print("Número de reseñas publicadas:", usuario['reseñas_publicadas'])
-    else:
-        print("No se encontró el usuario con ese ID.")
-
-def actualizar_informacion(cursor, conexion, usuario_id):
-    nuevo_nombre = input("Nuevo nombre de usuario (deja vacío si no deseas cambiarlo): ")
-    nuevo_correo = input("Nuevo correo electrónico (deja vacío si no deseas cambiarlo): ")
-    nueva_plataforma = input("Nueva plataforma (deja vacío si no deseas cambiarla): ")
-
-    # Construir la consulta de actualización
-    query = "UPDATE usuarios SET "
-    values = []
-    
-    if nuevo_nombre:
-        query += "nombre_usuario = %s, "
-        values.append(nuevo_nombre)
-    if nuevo_correo:
-        query += "correo = %s, "
-        values.append(nuevo_correo)
-    if nueva_plataforma:
-        query += "plataforma_id = %s, "
-        values.append(nueva_plataforma)
-
-    # Eliminar la última coma si hubo alguna actualización
-    if query.endswith(", "):
-        query = query[:-2]
-
-    query += " WHERE id = %s"
-    values.append(usuario_id)
-
-    cursor.execute(query, tuple(values))
-    conexion.commit()
-
-    print("Información actualizada correctamente.")
+def eliminar_membresia_clan(id):
+    connection = conectar()
+    if connection:
+        try:
+            cursor = connection.cursor()
+            query = "DELETE FROM membresias_clan WHERE id = %s"
+            cursor.execute(query, (id,))
+            connection.commit()
+            print("Membresía de clan eliminada correctamente.")
+        except Error as e:
+            print(f"Error al eliminar membresía de clan: {e}")
+        finally:
+            cursor.close()
+            connection.close()
